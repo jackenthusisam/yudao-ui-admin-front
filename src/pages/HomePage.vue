@@ -1,12 +1,25 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { onMounted, ref } from 'vue'
 import { CheckCircle2, Crown, MessageCircle, Rocket, Search, ShoppingBag, TrendingUp } from 'lucide-vue-next'
 import AppLayout from '../components/AppLayout.vue'
 import ProjectCard from '../components/ProjectCard.vue'
 import SectionTitle from '../components/SectionTitle.vue'
-import { categories, projects, stats } from '../data/projects'
+import { stats } from '../data/projects'
+import { marketConfig } from '../services/marketConfig'
+import { projectService } from '../services/projectService'
+import type { Category, Project } from '../types/project'
 
-const featured = computed(() => projects.slice(0, 6))
+const categories = ref<Category[]>([])
+const featured = ref<Project[]>([])
+
+onMounted(async () => {
+  const [categoryList, projectList] = await Promise.all([
+    projectService.listCategories(),
+    projectService.listProjects('all', '', 'hot'),
+  ])
+  categories.value = categoryList
+  featured.value = projectList.slice(0, 6)
+})
 </script>
 
 <template>
@@ -81,6 +94,16 @@ const featured = computed(() => projects.slice(0, 6))
         <div><Rocket :size="44" /><strong>落地快</strong><span>提供详细教程与执行指导，快速上手落地。</span></div>
         <div><CheckCircle2 :size="44" /><strong>可复制</strong><span>成熟方法论与SOP，降低试错成本。</span></div>
         <div><TrendingUp :size="44" /><strong>持续上新</strong><span>每周更新优质项目，紧跟市场机会。</span></div>
+      </div>
+    </section>
+
+    <section class="container block">
+      <h2 class="center-title">招商开通信息</h2>
+      <div class="info-grid">
+        <div><ShoppingBag :size="36" /><strong>项目有哪些</strong><span>商品来自 Java 后端商城模块，后台上架后会同步到项目商城。</span></div>
+        <div><MessageCircle :size="36" /><strong>如何联系我们</strong><span>{{ marketConfig.contactPhone }} / {{ marketConfig.contactWechat }}</span></div>
+        <div><Rocket :size="36" /><strong>怎么开通</strong><span>{{ marketConfig.openingSteps.join('，') }}</span></div>
+        <div><CheckCircle2 :size="36" /><strong>怎么注册</strong><span>{{ marketConfig.registerText }}</span></div>
       </div>
     </section>
 

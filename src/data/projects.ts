@@ -138,7 +138,7 @@ export const getProjectById = (id: string) => projects.find((project) => project
 export const navItems = [
   { label: '首页', to: '/' },
   { label: '项目商城', to: '/market' },
+  { label: '购物车', to: '/cart' },
+  { label: '已购商品', to: '/purchases' },
   { label: '会员服务', to: '/membership' },
-  { label: '合作入驻', to: '/partners' },
-  { label: '关于我们', to: '/about' },
 ]

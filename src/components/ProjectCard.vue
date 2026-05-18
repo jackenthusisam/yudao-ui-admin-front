@@ -11,7 +11,8 @@ defineProps<{
 
 <template>
   <article class="project-card" :class="{ compact }">
-    <ProjectVisual :tone="project.imageTone" />
+    <img v-if="project.imageUrl" class="project-image" :src="project.imageUrl" :alt="project.title" />
+    <ProjectVisual v-else :tone="project.imageTone" />
     <div class="project-card-body">
       <h3>
         {{ project.title }}
@@ -23,7 +24,7 @@ defineProps<{
       </div>
       <div class="price-row">
         <strong>￥{{ project.price }}</strong>
-        <small>会员价 ￥{{ project.memberPrice }}</small>
+        <small>销量 {{ project.salesCount ?? 0 }} · 库存 {{ project.stock ?? 0 }}</small>
       </div>
       <RouterLink :to="`/projects/${project.id}`" class="detail-link">查看详情</RouterLink>
     </div>

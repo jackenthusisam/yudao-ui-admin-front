@@ -1,15 +1,57 @@
 <script setup lang="ts">
-import { computed } from 'vue'
-import { useRoute } from 'vue-router'
+import { computed, onMounted, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { Bot, CalendarDays, CheckCircle2, Crown, MessageCircle, PackageCheck, ShoppingCart, UsersRound } from 'lucide-vue-next'
 import AppLayout from '../components/AppLayout.vue'
 import ProjectCard from '../components/ProjectCard.vue'
 import ProjectVisual from '../components/ProjectVisual.vue'
-import { getProjectById, projects } from '../data/projects'
+import { getProjectById } from '../data/projects'
+import { authService } from '../services/authService'
+import { cartService } from '../services/cartService'
+import { marketConfig } from '../services/marketConfig'
+import { projectService } from '../services/projectService'
+import type { Project } from '../types/project'
 
 const route = useRoute()
-const project = computed(() => getProjectById(String(route.params.id)))
-const related = computed(() => projects.filter((item) => item.id !== project.value.id).slice(0, 3))
+const router = useRouter()
+const project = ref<Project>(getProjectById(String(route.params.id)))
+const related = ref<Project[]>([])
+const actionMessage = ref('')
+const actionLoading = ref(false)
+const descriptionText = computed(() => project.value.projectIntro || project.value.description?.replace(/<[^>]+>/g, '').trim() || project.value.summary)
+const imageRelated = computed(() => related.value.filter((item) => item.imageUrl))
+const visualRelated = computed(() => related.value.filter((item) => !item.imageUrl))
+
+const loadProject = async () => {
+  const id = String(route.params.id)
+  project.value = await projectService.getProject(id)
+  related.value = await projectService.listRelatedProjects(id, project.value.category)
+}
+
+onMounted(loadProject)
+watch(() => route.params.id, loadProject)
+
+const addToCart = async () => {
+  actionMessage.value = ''
+  if (!authService.isLoggedIn.value) {
+    await router.push('/login')
+    return
+  }
+  if (!project.value.skuId) {
+    actionMessage.value = '当前商品没有可用 SKU，请先在管理端维护规格。'
+    return
+  }
+  actionLoading.value = true
+  try {
+    await cartService.add(project.value.skuId, 1)
+    actionMessage.value = '已加入购物车'
+    await router.push('/cart')
+  } catch (error) {
+    actionMessage.value = error instanceof Error ? error.message : '加入购物车失败'
+  } finally {
+    actionLoading.value = false
+  }
+}
 </script>
 
 <template>
@@ -18,34 +60,43 @@ const related = computed(() => projects.filter((item) => item.id !== project.val
       <div class="breadcrumb">首页 / 项目商城 / {{ project.title }}</div>
       <div class="detail-hero">
         <div>
-          <ProjectVisual :tone="project.imageTone" />
+          <img v-if="project.imageUrl" class="detail-product-image" :src="project.imageUrl" :alt="project.title" />
+          <ProjectVisual v-else :tone="project.imageTone" />
           <div class="thumb-row">
-            <ProjectVisual v-for="item in related" :key="item.id" :tone="item.imageTone" />
+            <img
+              v-for="item in imageRelated"
+              :key="item.id"
+              class="project-image mini"
+              :src="item.imageUrl"
+              :alt="item.title"
+            />
+            <ProjectVisual v-for="item in visualRelated" :key="item.id" :tone="item.imageTone" />
           </div>
         </div>
 
         <div class="detail-copy">
           <span class="badge">热门项目</span>
           <h1>{{ project.title }}</h1>
-          <p>{{ project.summary }} 适合个人、团队及企业快速开展变现业务。</p>
+          <p>{{ project.summary }}</p>
           <div class="tag-row large">
             <span v-for="tag in project.tags" :key="tag">{{ tag }}</span>
           </div>
           <div class="price-panel">
             <div><span>标准价格</span><strong>￥{{ project.price }}</strong></div>
-            <div><span>会员价格</span><strong>￥{{ project.memberPrice }}</strong></div>
+            <div><span>库存</span><strong>{{ project.stock ?? 0 }}</strong></div>
             <RouterLink to="/membership"><Crown :size="18" />699会员享受更多折扣</RouterLink>
           </div>
           <div class="detail-actions">
-            <button class="primary-btn"><ShoppingCart :size="20" />立即购买</button>
+            <button class="primary-btn" :disabled="actionLoading" @click="addToCart"><ShoppingCart :size="20" />加入购物车</button>
             <button class="outline-btn wide"><MessageCircle :size="20" />咨询顾问</button>
             <RouterLink to="/membership" class="outline-btn wide purple"><Crown :size="20" />开通699会员</RouterLink>
           </div>
+          <p v-if="actionMessage" class="action-message">{{ actionMessage }}</p>
           <div class="meta-grid">
             <div><UsersRound :size="18" /><span>适合人群</span><strong>个人创业者、工作室、团队</strong></div>
             <div><CalendarDays :size="18" /><span>落地周期</span><strong>3-7天即可启动</strong></div>
-            <div><PackageCheck :size="18" /><span>交付方式</span><strong>资料包 + 视频教程 + 工具包</strong></div>
-            <div><Bot :size="18" /><span>服务支持</span><strong>专属社群 + 客服指导 + 持续更新</strong></div>
+            <div><PackageCheck :size="18" /><span>商品销量</span><strong>{{ project.salesCount ?? 0 }}</strong></div>
+            <div><Bot :size="18" /><span>商品编号</span><strong>{{ project.id }}</strong></div>
           </div>
         </div>
       </div>
@@ -53,21 +104,21 @@ const related = computed(() => projects.filter((item) => item.id !== project.val
       <div class="tab-panel">
         <nav>
           <a class="active">项目介绍</a>
-          <a>项目亮点</a>
-          <a>操作流程</a>
+          <a>项目说明</a>
+          <a>产品使用说明</a>
           <a>交付清单</a>
-          <a>常见问题</a>
+          <a>怎么开通</a>
           <a>相关推荐</a>
         </nav>
         <div class="intro-grid">
           <div>
             <h2>项目介绍</h2>
-            <p>{{ project.title }}通过搭建标准化执行链路，结合脚本、素材与智能工具，实现快速启动和稳定变现。项目适合希望低成本试水、快速拿到结果的团队。</p>
+            <p>{{ descriptionText }}</p>
             <ul class="check-list">
-              <li><CheckCircle2 :size="18" />零真人出镜，降低人力成本</li>
-              <li><CheckCircle2 :size="18" />自动化执行，减少重复劳动</li>
-              <li><CheckCircle2 :size="18" />多平台覆盖，流量更大</li>
-              <li><CheckCircle2 :size="18" />标准化流程，可快速复制</li>
+              <li><CheckCircle2 :size="18" />项目介绍、项目说明、产品使用说明来自后台商品详情</li>
+              <li><CheckCircle2 :size="18" />登录、购物车、订单均走 Yudao Java 后端</li>
+              <li><CheckCircle2 :size="18" />注册默认使用租户 1 的会员体系</li>
+              <li><CheckCircle2 :size="18" />交易完成后在已购商品中展示</li>
             </ul>
           </div>
           <div class="result-grid">
@@ -80,22 +131,22 @@ const related = computed(() => projects.filter((item) => item.id !== project.val
       </div>
 
       <section class="detail-section">
-        <h2>项目亮点</h2>
+        <h2>项目说明</h2>
         <div class="feature-grid">
-          <div><UsersRound :size="44" /><strong>低门槛</strong><span>无需真人出镜，简单配置即可开播。</span></div>
-          <div><Bot :size="44" /><strong>自动化执行</strong><span>脚本自动轮播，自动互动，减少人工干预。</span></div>
-          <div><PackageCheck :size="44" /><strong>可批量复制</strong><span>标准化工具与素材库，支持批量起号。</span></div>
-          <div><CalendarDays :size="44" /><strong>持续更新</strong><span>提供最新玩法、工具与案例，保持竞争力。</span></div>
+          <div><UsersRound :size="44" /><strong>项目定位</strong><span>{{ project.projectDescription }}</span></div>
+          <div><Bot :size="44" /><strong>后台可配置</strong><span>通过管理端商城商品名称、图片、价格、库存和详情维护招商信息。</span></div>
+          <div><PackageCheck :size="44" /><strong>订单闭环</strong><span>选中商品进入购物车，交易完成后进入已购商品列表。</span></div>
+          <div><CalendarDays :size="44" /><strong>持续维护</strong><span>商品详情可按项目更新交付说明、权益和服务内容。</span></div>
         </div>
       </section>
 
       <section class="detail-section">
-        <h2>操作流程</h2>
+        <h2>产品使用说明</h2>
+        <p class="rich-text">{{ project.usageGuide }}</p>
         <div class="process-row">
-          <div><strong>01</strong><b>准备账号</b><span>注册账号，完成实名认证与基础设置。</span></div>
-          <div><strong>02</strong><b>配置工具</b><span>安装直播工具，导入脚本与素材。</span></div>
-          <div><strong>03</strong><b>开播执行</b><span>一键开播，系统自动执行脚本与互动。</span></div>
-          <div><strong>04</strong><b>数据复盘</b><span>查看直播数据，分析优化内容与策略。</span></div>
+          <div v-for="(step, index) in marketConfig.openingSteps" :key="step">
+            <strong>{{ String(index + 1).padStart(2, '0') }}</strong><b>开通步骤</b><span>{{ step }}</span>
+          </div>
         </div>
       </section>
 

@@ -1,22 +1,41 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { onMounted, ref, watch } from 'vue'
 import { ChevronDown, ChevronLeft, ChevronRight, Crown, Search } from 'lucide-vue-next'
 import AppLayout from '../components/AppLayout.vue'
 import ProjectCard from '../components/ProjectCard.vue'
 import ProjectVisual from '../components/ProjectVisual.vue'
-import { categories, projects } from '../data/projects'
+import { projectService } from '../services/projectService'
+import type { Category, Project } from '../types/project'
 
 const activeCategory = ref('all')
 const keyword = ref('')
+const sort = ref('latest')
+const loading = ref(true)
+const categories = ref<Category[]>([])
+const projects = ref<Project[]>([])
 
-const filteredProjects = computed(() => {
-  const byCategory = activeCategory.value === 'all'
-    ? projects
-    : projects.filter((project) => project.category === activeCategory.value)
+const loadCategories = async () => {
+  categories.value = await projectService.listCategories()
+}
 
-  return byCategory.filter((project) =>
-    `${project.title}${project.summary}${project.tags.join('')}`.toLowerCase().includes(keyword.value.toLowerCase()),
-  )
+const loadProjects = async () => {
+  loading.value = true
+  try {
+    projects.value = await projectService.listProjects(activeCategory.value, keyword.value, sort.value)
+  } finally {
+    loading.value = false
+  }
+}
+
+let keywordTimer = 0
+watch([activeCategory, sort], loadProjects)
+watch(keyword, () => {
+  window.clearTimeout(keywordTimer)
+  keywordTimer = window.setTimeout(loadProjects, 280)
+})
+
+onMounted(async () => {
+  await Promise.all([loadCategories(), loadProjects()])
 })
 </script>
 
@@ -36,7 +55,7 @@ const filteredProjects = computed(() => {
 
     <section class="container market-layout">
       <aside class="market-sidebar">
-        <h3>项目类目</h3>
+          <h3>项目类目</h3>
         <button
           v-for="category in categories"
           :key="category.id"
@@ -79,25 +98,21 @@ const filteredProjects = computed(() => {
               <Search :size="20" />
               <input v-model="keyword" placeholder="搜索项目 / 关键词" />
             </label>
-            <button class="sort active">最新 <ChevronDown :size="16" /></button>
-            <button class="sort">最热</button>
-            <button class="sort">价格</button>
-            <button class="sort">推荐</button>
+            <button class="sort" :class="{ active: sort === 'latest' }" @click="sort = 'latest'">最新 <ChevronDown :size="16" /></button>
+            <button class="sort" :class="{ active: sort === 'hot' }" @click="sort = 'hot'">最热</button>
+            <button class="sort" :class="{ active: sort === 'price' }" @click="sort = 'price'">价格</button>
+            <button class="sort" :class="{ active: sort === 'recommend' }" @click="sort = 'recommend'">推荐</button>
           </div>
+          <div v-if="loading" class="empty-state">正在加载后台商城商品...</div>
           <div class="market-grid">
-            <ProjectCard v-for="project in filteredProjects" :key="project.id" :project="project" />
+            <ProjectCard v-for="project in projects" :key="project.id" :project="project" />
           </div>
+          <div v-if="!loading && projects.length === 0" class="empty-state">暂无匹配商品</div>
           <div class="pagination">
             <button><ChevronLeft :size="18" /></button>
             <button class="active">1</button>
-            <button>2</button>
-            <button>3</button>
-            <button>4</button>
-            <button>5</button>
-            <span>...</span>
-            <button>16</button>
             <button><ChevronRight :size="18" /></button>
-            <span>共 16 页</span>
+            <span>共 {{ projects.length }} 件商品</span>
           </div>
         </div>
       </div>
@@ -107,7 +122,8 @@ const filteredProjects = computed(() => {
       <div class="section-title"><h2>热门推荐</h2><RouterLink to="/market">查看更多 ›</RouterLink></div>
       <div class="recommend-strip">
         <RouterLink v-for="project in projects.slice(0, 4)" :key="project.id" :to="`/projects/${project.id}`">
-          <ProjectVisual :tone="project.imageTone" />
+          <img v-if="project.imageUrl" class="project-image mini" :src="project.imageUrl" :alt="project.title" />
+          <ProjectVisual v-else :tone="project.imageTone" />
           <div><strong>{{ project.title }}</strong><span>￥{{ project.memberPrice }}起</span></div>
         </RouterLink>
       </div>
